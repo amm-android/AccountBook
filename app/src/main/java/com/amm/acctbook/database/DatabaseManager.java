@@ -12,6 +12,7 @@ import com.amm.acctbook.database.table.Category;
 import com.amm.acctbook.database.table.Entry;
 import com.amm.acctbook.event.CategoryChangedEvent;
 import com.amm.acctbook.event.EntryChangedEvent;
+import com.amm.acctbook.event.EntryUpdateEvent;
 
 import org.simple.eventbus.EventBus;
 
@@ -59,6 +60,99 @@ public class DatabaseManager {
         return isSuccess;
     }
 
+    /**
+     * 查询所有分类
+     *
+     * @return 分类List
+     */
+    public List<Category> queryAllCategory() {
+        ArrayList<Category> categories = new ArrayList<>();
+        Cursor cursor = db.rawQuery("select * from " + DatabaseOpenHelper.TABLE_CATEGORY, null);
+        while (cursor.moveToNext()) {
+            Category category = new Category(
+                    cursor.getInt(cursor.getColumnIndex("id")),
+                    cursor.getString(cursor.getColumnIndex("name")),
+                    cursor.getString(cursor.getColumnIndex("info")),
+                    cursor.getInt(cursor.getColumnIndex("type")));
+            categories.add(category);
+        }
+        cursor.close();
+        return categories;
+    }
+
+    /**
+     * 根据流水条目查询类别对象
+     * @param entry
+     * @return 是否操作成功
+     */
+    public Category queryCategoryByEntry(@NonNull Entry entry) {
+        Cursor cursor = db.rawQuery("select * from " + DatabaseOpenHelper.TABLE_CATEGORY + " where id = ?", new String[]{String.valueOf(entry.getCategoryId())});
+        Category category = null;
+        if (cursor.moveToNext()) {
+            category = new Category(
+                    cursor.getInt(cursor.getColumnIndex("id")),
+                    cursor.getString(cursor.getColumnIndex("name")),
+                    cursor.getString(cursor.getColumnIndex("info")),
+                    cursor.getInt(cursor.getColumnIndex("type")));
+        }
+        cursor.close();
+        return category;
+    }
+
+    /**
+     * 修改类别
+     *
+     * @param category
+     * @return 是否操作成功
+     */
+    public boolean updateCategory(Category category) {
+        boolean isSuccess;
+        db.beginTransaction();
+        try {
+            ContentValues values = new ContentValues();
+            values.put("name", category.getName());
+            values.put("info", category.getInfo());
+            values.put("type", category.getType());
+            db.update(DatabaseOpenHelper.TABLE_CATEGORY, values, "id = ?", new String[]{String.valueOf(category.getId())});
+            db.setTransactionSuccessful();
+            isSuccess = true;
+            EventBus.getDefault().post(new CategoryChangedEvent());
+        } catch (Exception e) {
+            e.printStackTrace();
+            isSuccess = false;
+        } finally {
+            db.endTransaction();
+        }
+        return isSuccess;
+    }
+
+    /**
+     * 移除类别
+     *
+     * @param category
+     * @return 是否操作成功
+     */
+    public boolean removeCategory(Category category) {
+        boolean isSuccess;
+        if (!updateEntriesInCategory(category)) {
+            Toast.makeText(context, "更新分类下条目的类别失败", Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        db.beginTransaction();
+        try {
+            db.delete(DatabaseOpenHelper.TABLE_CATEGORY, "id = ?", new String[]{String.valueOf(category.getId())});
+            db.setTransactionSuccessful();
+            isSuccess = true;
+            EventBus.getDefault().post(new CategoryChangedEvent());
+        } catch (Exception e) {
+            e.printStackTrace();
+            isSuccess = false;
+        } finally {
+            db.endTransaction();
+        }
+        return isSuccess;
+    }
+
 
     /**
      * 增加流水记录
@@ -79,9 +173,7 @@ public class DatabaseManager {
             db.insert(DatabaseOpenHelper.TABLE_ENTRY, null, values);
             db.setTransactionSuccessful();
             isSuccess = true;
-            Calendar calendar = Calendar.getInstance(Locale.CHINA);
-            calendar.setTimeInMillis(entry.getTimestamp());
-            EventBus.getDefault().post(new EntryChangedEvent(calendar));
+            EventBus.getDefault().post(new EntryChangedEvent());
             Log.d("添加流水", "成功");
         } catch (Exception e) {
             e.printStackTrace();
@@ -90,6 +182,29 @@ public class DatabaseManager {
             db.endTransaction();
         }
         return isSuccess;
+    }
+
+    /**
+     * 查询所有流水条目
+     *
+     * @return 流水List
+     */
+    public List<Entry> queryAllEntry() {
+        ArrayList<Entry> entries = new ArrayList<>();
+        Cursor cursor = db.rawQuery("select * from " + DatabaseOpenHelper.TABLE_ENTRY, null);
+        while (cursor.moveToNext()) {
+            Entry entry = new Entry(
+                    cursor.getInt(cursor.getColumnIndex("id")),
+                    cursor.getInt(cursor.getColumnIndex("category_id")),
+                    cursor.getFloat(cursor.getColumnIndex("amount")),
+                    cursor.getString(cursor.getColumnIndex("time")),
+                    cursor.getLong(cursor.getColumnIndex("timestamp")),
+                    cursor.getString(cursor.getColumnIndex("info")));
+            entries.add(entry);
+        }
+        cursor.close();
+        Collections.reverse(entries);
+        return entries;
     }
 
     /**
@@ -103,7 +218,7 @@ public class DatabaseManager {
         db.beginTransaction();
         try {
             ContentValues values = new ContentValues();
-            values.put("categoryId", entry.getCategoryId());
+            values.put("category_id", entry.getCategoryId());
             values.put("amount", entry.getAmount());
             values.put("time", entry.getTime());
             values.put("timestamp", entry.getTimestamp());
@@ -111,9 +226,7 @@ public class DatabaseManager {
             db.update(DatabaseOpenHelper.TABLE_ENTRY, values, "id = ?", new String[]{String.valueOf(entry.getId())});
             db.setTransactionSuccessful();
             isSuccess = true;
-//            Calendar calendar = Calendar.getInstance(Locale.CHINA);
-//            calendar.setTimeInMillis(entry.getTimestamp());
-//            EventBus.getDefault().post(new EntryChangedEvent(calendar));
+            EventBus.getDefault().post(new EntryChangedEvent());
         } catch (Exception e) {
             e.printStackTrace();
             isSuccess = false;
@@ -138,7 +251,7 @@ public class DatabaseManager {
             isSuccess = true;
             Calendar calendar = Calendar.getInstance(Locale.CHINA);
             calendar.setTimeInMillis(entry.getTimestamp());
-            EventBus.getDefault().post(new EntryChangedEvent(calendar));
+            EventBus.getDefault().post(new EntryChangedEvent());
         } catch (Exception e) {
             e.printStackTrace();
             isSuccess = false;
@@ -149,21 +262,23 @@ public class DatabaseManager {
     }
 
     /**
-     * 移除类别下的所有条目
+     * 移除类别下的所有条目的类别信息
      *
      * @param category
      * @return 是否操作成功
      */
-    public boolean removeEntriesInCategory(Category category) {
+    public boolean updateEntriesInCategory(Category category) {
         boolean isSuccess;
         int count;
         db.beginTransaction();
         try {
-            count = db.delete(DatabaseOpenHelper.TABLE_ENTRY, "category_id = ?", new String[]{String.valueOf(category.getId())});
+            ContentValues contentValues = new ContentValues();
+            contentValues.put("category_id", -1);
+            count = db.update(DatabaseOpenHelper.TABLE_ENTRY,contentValues, "category_id = ?", new String[]{String.valueOf(category.getId())});
             db.setTransactionSuccessful();
             isSuccess = true;
-            Log.d("删除分类中的流水记录", "删除了 " + count + " 条记录");
-            EventBus.getDefault().post(new EntryChangedEvent(Calendar.getInstance(Locale.CHINA)));
+            Log.d("删除分类下条目的类别信息", "更新了 " + count + " 条记录");
+            EventBus.getDefault().post(new EntryChangedEvent());
         } catch (Exception e) {
             e.printStackTrace();
             isSuccess = false;
@@ -172,128 +287,6 @@ public class DatabaseManager {
         }
         return isSuccess;
     }
-
-    /**
-     * 移除类别
-     *
-     * @param category
-     * @return 是否操作成功
-     */
-    public boolean removeCategory(Category category) {
-        boolean isSuccess;
-        if (!removeEntriesInCategory(category)) {
-            Toast.makeText(context, "删除分类下的条目失败", Toast.LENGTH_SHORT).show();
-            return false;
-        }
-        db.beginTransaction();
-        try {
-            db.delete(DatabaseOpenHelper.TABLE_CATEGORY, "id = ?", new String[]{String.valueOf(category.getId())});
-            db.setTransactionSuccessful();
-            isSuccess = true;
-            EventBus.getDefault().post(new CategoryChangedEvent());
-        } catch (Exception e) {
-            e.printStackTrace();
-            isSuccess = false;
-        } finally {
-            db.endTransaction();
-        }
-        return isSuccess;
-    }
-
-    /**
-     * 查询所有分类
-     *
-     * @return 分类List
-     */
-    public List<Category> queryCategory() {
-        ArrayList<Category> categories = new ArrayList<>();
-        Cursor cursor = db.rawQuery("select * from " + DatabaseOpenHelper.TABLE_CATEGORY, null);
-        while (cursor.moveToNext()) {
-            Category category = new Category(
-                    cursor.getInt(cursor.getColumnIndex("id")),
-                    cursor.getString(cursor.getColumnIndex("name")),
-                    cursor.getString(cursor.getColumnIndex("info")),
-                    cursor.getInt(cursor.getColumnIndex("type")));
-            categories.add(category);
-        }
-        cursor.close();
-        return categories;
-    }
-
-    /**
-     * 查询所有流水条目
-     *
-     * @return 流水List
-     */
-    public List<Entry> queryEntry() {
-        ArrayList<Entry> entries = new ArrayList<>();
-        Cursor cursor = db.rawQuery("select * from " + DatabaseOpenHelper.TABLE_ENTRY, null);
-        while (cursor.moveToNext()) {
-            Entry entry = new Entry(
-                    cursor.getInt(cursor.getColumnIndex("id")),
-                    cursor.getInt(cursor.getColumnIndex("category_id")),
-                    cursor.getFloat(cursor.getColumnIndex("amount")),
-                    cursor.getString(cursor.getColumnIndex("time")),
-                    cursor.getLong(cursor.getColumnIndex("timestamp")),
-                    cursor.getString(cursor.getColumnIndex("info")));
-            entries.add(entry);
-        }
-        cursor.close();
-        Collections.reverse(entries);
-        return entries;
-    }
-
-    /**
-     * 按月查询流水条目
-     *
-     * @return 流水List
-     */
-    public List<Entry> queryEntryByMonth(int year, int month) {
-        ArrayList<Entry> entries = new ArrayList<>();
-        Calendar startCalendar = Calendar.getInstance(Locale.CHINA);
-        startCalendar.set(year, month, 1, 0, 0, 0);
-        startCalendar.set(Calendar.MILLISECOND, 0);
-        Calendar endCalendar = Calendar.getInstance(Locale.CHINA);
-        endCalendar.set(year, month + 1, 1, 0, 0, 0);
-        endCalendar.set(Calendar.MILLISECOND, -1);
-        Log.i("queryEntryByMonth", "select * from "
-                + DatabaseOpenHelper.TABLE_ENTRY
-                + " where timestamp between "
-                + startCalendar.getTimeInMillis()
-                + " and "
-                + endCalendar.getTimeInMillis());
-        Cursor cursor = db.rawQuery("select * from entry where timestamp between ? and ?",
-                new String[]{String.valueOf(startCalendar.getTimeInMillis()), String.valueOf(endCalendar.getTimeInMillis())});
-
-        while (cursor.moveToNext()) {
-            Entry entry = new Entry(
-                    cursor.getInt(cursor.getColumnIndex("id")),
-                    cursor.getInt(cursor.getColumnIndex("category_id")),
-                    cursor.getFloat(cursor.getColumnIndex("amount")),
-                    cursor.getString(cursor.getColumnIndex("time")),
-                    cursor.getLong(cursor.getColumnIndex("timestamp")),
-                    cursor.getString(cursor.getColumnIndex("info")));
-            entries.add(entry);
-        }
-        cursor.close();
-        Collections.reverse(entries);
-        return entries;
-    }
-
-    public Category queryCategoryFromChild(@NonNull Entry entry) {
-        Cursor cursor = db.rawQuery("select * from " + DatabaseOpenHelper.TABLE_CATEGORY + " where id = ?", new String[]{String.valueOf(entry.getCategoryId())});
-        Category category = null;
-        if (cursor.moveToNext()) {
-            category = new Category(
-                    cursor.getInt(cursor.getColumnIndex("id")),
-                    cursor.getString(cursor.getColumnIndex("name")),
-                    cursor.getString(cursor.getColumnIndex("info")),
-                    cursor.getInt(cursor.getColumnIndex("type")));
-        }
-        cursor.close();
-        return category;
-    }
-
 
     public void close() {
         helper.close();

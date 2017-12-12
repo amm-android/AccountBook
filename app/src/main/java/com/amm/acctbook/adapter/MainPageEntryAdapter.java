@@ -61,16 +61,10 @@ public class MainPageEntryAdapter extends BaseAdapter {
         }
 
         Entry entry = (Entry) getItem(position);
-        Category category = manager.queryCategoryFromChild(entry);
-        DateFormat df = SimpleDateFormat.getDateInstance();
+        Category category = manager.queryCategoryByEntry(entry);
         holder.tvDate.setText(entry.getTime());
-        holder.tvCategory.setText(category == null ? "未知类别" : category.getName());
-        StringBuilder builder = new StringBuilder();
-        if (manager.queryCategoryFromChild(entry).getType() == Category.TYPE_COST)
-            builder.append("－ ");
-        else
-            builder.append("＋ ");
-        holder.tvAmount.setText(builder.append(new DecimalFormat(".00").format(entry.getAmount())).toString());
+        holder.tvCategory.setText(category == null ? "无类别" : category.getName());
+        holder.tvAmount.setText("－"+(new DecimalFormat(".00").format(entry.getAmount())).toString());
         if (position%2 == 1) convertView.setBackgroundColor(Color.parseColor("#0F000000"));
         else convertView.setBackgroundColor(Color.parseColor("#00000000"));
         return convertView;

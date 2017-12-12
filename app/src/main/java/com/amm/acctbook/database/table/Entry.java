@@ -2,7 +2,9 @@ package com.amm.acctbook.database.table;
 
 import android.support.annotation.Nullable;
 
-public class Entry {
+import java.io.Serializable;
+
+public class Entry implements Serializable{
     private int id;
     private int categoryId;
     private float amount;

@@ -48,25 +48,16 @@ public class BaseApplication extends Application {
         queryEntry();
     }
 
-    private Calendar calendar = Calendar.getInstance(Locale.CHINA);
-
-    public void queryEntry(Calendar calendar) {
-        this.calendar = calendar;
-        queryEntry();
-    }
-
     private void queryEntry() {
-        if (!entries.isEmpty())
-            entries.clear();
-        entries.addAll(dbManager.queryEntryByMonth(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH)));
-        EventBus.getDefault().post(new EntryUpdateEvent(calendar));
+        if (!entries.isEmpty()){entries.clear();}
+        entries.addAll(dbManager.queryAllEntry());
+        EventBus.getDefault().post(new EntryUpdateEvent());
     }
 
 
     private void queryCategory() {
-        if (!categories.isEmpty())
-            categories.clear();
-        categories.addAll(dbManager.queryCategory());
+        if (!categories.isEmpty()){categories.clear();}
+        categories.addAll(dbManager.queryAllCategory());
         EventBus.getDefault().post(new CategoryUpdateEvent());
     }
 
@@ -78,7 +69,6 @@ public class BaseApplication extends Application {
 
     @Subscriber
     private void onEntryChanged(EntryChangedEvent event) {
-        calendar = event.getCalendar();
         queryEntry();
     }
 
@@ -97,9 +87,5 @@ public class BaseApplication extends Application {
 
     public List<Entry> getEntries() {
         return entries;
-    }
-
-    public Calendar getCalendar() {
-        return calendar;
     }
 }

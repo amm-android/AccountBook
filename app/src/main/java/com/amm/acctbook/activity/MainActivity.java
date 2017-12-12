@@ -3,6 +3,7 @@ package com.amm.acctbook.activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.text.TextUtils;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ListView;
@@ -14,6 +15,7 @@ import com.amm.acctbook.adapter.MainPageEntryAdapter;
 import com.amm.acctbook.base.BaseActivity;
 import com.amm.acctbook.base.BaseApplication;
 import com.amm.acctbook.database.table.Entry;
+import com.amm.acctbook.event.CategoryUpdateEvent;
 import com.amm.acctbook.event.EntryUpdateEvent;
 import org.simple.eventbus.Subscriber;
 import java.text.DecimalFormat;
@@ -76,11 +78,18 @@ public class MainActivity extends BaseActivity implements AdapterView.OnItemClic
         calculate();
     }
 
+    @Subscriber
+    private void onCategoryUpdate(CategoryUpdateEvent event) {
+        adapter.notifyDataSetChanged();
+    }
+
     @OnClick({R.id.tv_add})
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.tv_add:
-                startActivity(new Intent(this, EntryAddActivity.class));
+                Intent intent = new Intent(MainActivity.this, EntryAddActivity.class);
+                intent.putExtra("pageType","add");
+                startActivity(intent);
                 break;
         }
     }
@@ -88,22 +97,47 @@ public class MainActivity extends BaseActivity implements AdapterView.OnItemClic
     @Override
     public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
         Entry entry = entries.get(position);
-        String info = entry.getInfo();
-        if (null != info && !info.isEmpty())
-            Toast.makeText(this, entry.getInfo(), Toast.LENGTH_SHORT).show();
-        else
-            Toast.makeText(this, "这条记录没有添加备注", Toast.LENGTH_SHORT).show();
+        String info = TextUtils.isEmpty(entry.getInfo())?"无":entry.getInfo();
+        String msg = "时间："+entry.getTime()
+                +"\n金额："+entry.getAmount()
+                +"\n备注："+info;
+        new AlertDialog.Builder(this)
+                .setTitle("详情")
+                .setMessage(msg)
+                .setPositiveButton("确定",null)
+                .show();
     }
 
     @Override
     public boolean onItemLongClick(AdapterView<?> parent, View view, final int position, long id) {
-        new AlertDialog.Builder(this).setTitle("删除该条目？")
+        new AlertDialog.Builder(this)
+                .setItems(new String[]{"修改","删除"}, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                       if (which==0){
+                           Intent intent = new Intent(MainActivity.this, EntryAddActivity.class);
+                           intent.putExtra("pageType","edit");
+                           intent.putExtra("entry",entries.get(position));
+                           startActivity(intent);
+                       }else if (which==1){
+                           showDeleteItem(entries.get(position));
+                       }
+                    }
+                })
+                .show();
+        return true;
+    }
+
+    private void showDeleteItem(final Entry entry){
+        new AlertDialog.Builder(this)
+                .setTitle("提示")
+                .setMessage("确定删除该条目？")
                 .setPositiveButton("确定", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        app.getDbManager().removeEntry(entries.get(position));
+                        boolean isSuccess = app.getDbManager().removeEntry(entry);
+                        Toast.makeText(MainActivity.this,(isSuccess?"删除成功":"删除失败"),Toast.LENGTH_SHORT).show();
                     }
                 }).setNegativeButton("取消", null).show();
-        return true;
     }
 }

@@ -7,6 +7,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.DatePicker;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.TimePicker;
@@ -18,6 +19,11 @@ import com.amm.acctbook.base.BaseActivity;
 import com.amm.acctbook.base.BaseApplication;
 import com.amm.acctbook.database.table.Category;
 import com.amm.acctbook.database.table.Entry;
+import com.amm.acctbook.event.CategoryChangedEvent;
+import com.amm.acctbook.event.CategoryUpdateEvent;
+import com.amm.acctbook.event.EntryUpdateEvent;
+
+import org.simple.eventbus.Subscriber;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -28,9 +34,12 @@ import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 
+/**
+ * 添加、修改Entry
+ */
 public class EntryAddActivity extends BaseActivity {
     @BindView(R.id.iv_back)
-    TextView ivBack;
+    ImageView ivBack;
     @BindView(R.id.tv_category_manage)
     TextView tvCategoryManage;
     @BindView(R.id.spinner_category)
@@ -43,9 +52,11 @@ public class EntryAddActivity extends BaseActivity {
     TextView tvTime;
     @BindView(R.id.et_info)
     EditText etInfo;
-    @BindView(R.id.tv_add)
-    TextView tvAdd;
+    @BindView(R.id.iv_add)
+    ImageView ivAdd;
 
+    private String pageType="add";//页面类型：add添加、edit修改
+    private Entry entry;
     private BaseApplication app;
     private List<Category> categories = new ArrayList<>();
     private Calendar calendar;
@@ -62,34 +73,56 @@ public class EntryAddActivity extends BaseActivity {
         registerEventBus();
         initData();
         initView();
-        initCategorySpinner(Category.TYPE_COST);
     }
 
     private void initData() {
         app = (BaseApplication) getApplication();
+        categories = app.getCategories();
         calendar = Calendar.getInstance(Locale.CHINA);
+        pageType = getIntent().getStringExtra("pageType");
+        if (pageType.equals("edit")){
+            entry = (Entry) getIntent().getSerializableExtra("entry");
+        }
     }
 
     private void initView() {
-        tvDate.setText(getDateString(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH)));
-        tvTime.setText(getTimeString(calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE)));
-
-        adapter = new EntryAddCategoryAdatper(this, categories);
-        spinnerCategory.setAdapter(adapter);
-    }
-
-    private void initCategorySpinner(int type) {
-        categories.clear();
-        for (Category category : app.getCategories()) {
-            if (category.getType() == type)
-                categories.add(category);
+        if(pageType.equals("add")){
+            tvDate.setText(getDateString(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH)));
+            tvTime.setText(getTimeString(calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE)));
+        }else if (pageType.equals("edit")){
+            String[] times = entry.getTime().split(" ");
+            tvDate.setText(times[0]);
+            tvTime.setText(times[1]);
+            etAmount.setText(String.valueOf(entry.getAmount()));
+            etInfo.setText(entry.getInfo());
         }
-        adapter.notifyDataSetChanged();
+        initSpinnerView();
     }
 
+    private void initSpinnerView(){
+        if (adapter == null){
+            adapter = new EntryAddCategoryAdatper(this, categories);
+            spinnerCategory.setAdapter(adapter);
+        }else {
+            adapter.notifyDataSetChanged();
+        }
 
+        int select_index = 0;
+        for (int i = 0; i < categories.size(); i++) {
+            Category category = categories.get(i);
+            if (entry != null && entry.getCategoryId()==category.getId()){
+                select_index = i;
+            }
+        }
+        spinnerCategory.setSelection(select_index);
+    }
 
-    @OnClick({R.id.iv_back, R.id.tv_category_manage, R.id.tv_date, R.id.tv_time, R.id.tv_add})
+    @Subscriber
+    private void onCategoryUpdate(CategoryUpdateEvent event) {
+        initSpinnerView();
+    }
+
+    @OnClick({R.id.iv_back, R.id.tv_category_manage, R.id.tv_date, R.id.tv_time, R.id.iv_add})
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.iv_back:
@@ -97,7 +130,6 @@ public class EntryAddActivity extends BaseActivity {
                 break;
             case R.id.tv_category_manage:
                 startActivity(new Intent(this, CategoryManageActivity.class));
-                finish();
                 break;
             case R.id.tv_date:
                 new DatePickerDialog(this, onDateSetListener, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show();
@@ -105,7 +137,7 @@ public class EntryAddActivity extends BaseActivity {
             case R.id.tv_time:
                 new TimePickerDialog(this, onTimeSetListener, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show();
                 break;
-            case R.id.tv_add:
+            case R.id.iv_add:
                 String amount = etAmount.getText().toString();
                 if (amount.isEmpty()) {
                     Toast.makeText(this, "请输入金额", Toast.LENGTH_SHORT).show();
@@ -123,12 +155,19 @@ public class EntryAddActivity extends BaseActivity {
                 String time = tvDate.getText().toString() + " " + tvTime.getText().toString();
                 calendar.set(Calendar.SECOND, 0);
                 calendar.set(Calendar.MILLISECOND, 0);
-                int position = spinnerCategory.getSelectedItemPosition();
-                if (position > adapter.getCount() - 1) {
-                    position = adapter.getCount() - 1;
+                Category category_sel = (Category) spinnerCategory.getSelectedItem();
+                boolean isSuccess = true;
+                if(pageType.equals("add")){
+                    isSuccess = app.getDbManager().addEntry(new Entry(category_sel.getId(), Float.valueOf(amount), time, calendar.getTimeInMillis(), etInfo.getText().toString().trim()));
+                }else if (pageType.equals("edit")){
+                    isSuccess = app.getDbManager().updateEntry(new Entry(entry.getId(),category_sel.getId(), Float.valueOf(amount), time, calendar.getTimeInMillis(), etInfo.getText().toString().trim()));
                 }
-                app.getDbManager().addEntry(new Entry(adapter.getItem(position).getId(), Float.valueOf(amount), time, calendar.getTimeInMillis(), etInfo.getText().toString().trim()));
-                finish();
+                if (isSuccess){
+                    Toast.makeText(EntryAddActivity.this,pageType+"成功",Toast.LENGTH_SHORT).show();
+                    finish();
+                }else {
+                    Toast.makeText(EntryAddActivity.this,pageType+"失败",Toast.LENGTH_SHORT).show();
+                }
                 break;
         }
     }

@@ -29,7 +29,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="0"
-                android:textColor="@android:color/white"
+                android:textColor="@color/colorAccent"
                 android:textSize="20sp" />
         </LinearLayout>
 
@@ -38,9 +38,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentRight="true"
-            android:text="+ 添加记录"
+            android:text="+ 新建记录"
             android:textColor="@android:color/white"
-            android:textSize="20sp" />
+            android:textSize="16sp" />
     </RelativeLayout>
 
     <ListView
