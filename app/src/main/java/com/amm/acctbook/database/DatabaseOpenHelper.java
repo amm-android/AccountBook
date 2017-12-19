@@ -18,7 +18,7 @@ public class DatabaseOpenHelper extends SQLiteOpenHelper {
 
     public static final String TABLE_CATEGORY = "category";
     public static final String TABLE_ENTRY = "entry";
-    private static final String DATABASE_NAME = "account.db";
+    public static final String DATABASE_NAME = "account.db";
     private static final int DATABASE_VERSION = 3;
 
     public DatabaseOpenHelper(Context context) {
